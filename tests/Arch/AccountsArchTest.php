@@ -29,7 +29,10 @@ arch('strict types are enforced')
         'App\Domain',
         'App\Http\Controllers\Api',
         'App\Http\Requests\Auth',
+        'App\Models',
         'App\Providers\TokenServiceProvider',
+        'Database\Factories',
+        'Database\Seeders',
     ])
     ->toUseStrictTypes();
 
