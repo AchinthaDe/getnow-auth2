@@ -322,7 +322,7 @@ Open decisions (record as ADRs):
 | OQ3 | Token lifetimes. | Resolved: ADR 0001 (access 900 s, refresh 14 days, from `config/passport.php`). |
 | OQ4 | Scopes per role or policies only? | Resolved: ADR 0001 (empty scopes, authorization in `UserPolicy`). |
 | OQ5 | How does a retailer receive its first password: set by the superadmin, or an emailed set-password link? | Senior |
-| OQ6 | Hard delete or soft delete for `destroy`. | Senior |
+| OQ6 | Hard delete or soft delete for `destroy`. | Resolved: ADR 0003 (soft delete via `deleted_at` and `SoftDeletes` trait). Adopted in `ACC-U1`. |
 | OQ7 | Self-service profile endpoints (`/me`) for retailers and customers. | Senior |
 
 ## 12. Merge plan into the GetNow main repository
