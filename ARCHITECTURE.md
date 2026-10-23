@@ -242,8 +242,8 @@ Status boxes are ticked by the reviewer, not by agents.
 
 - [x] `ACC-C0` Bootstrap checks and contract: `composer check` green, `tests/Arch` rules, `TokenIssuer` and `TokenPairData` fixed against the imported code.
 - [x] `ACC-T0` Import the tokens stream from the earlier project (below).
-- [ ] `ACC-C1` Remove starter kit: strip Fortify, Livewire, Flux UI, passkeys, web routes and views; add unauthenticated JSON contract test.
-- [ ] `ACC-U1` Users foundation: `UserRole`, users migration additions, `User` model, factory, `SuperadminSeeder`.
+- [x] `ACC-C1` Remove starter kit: strip Fortify, Livewire, Flux UI, passkeys, web routes and views; add unauthenticated JSON contract test.
+- [x] `ACC-U1` Users foundation: `UserRole`, users migration additions, `User` model, factory, `SuperadminSeeder`.
 - [ ] `ACC-U2` Repository interface and repository, `UserData`, `UserFilterData`, `UserResponseData`.
 - [ ] `ACC-U3` `UserService`, `UserPolicy`, `UserController`, form requests, `/users` routes.
 - [ ] `ACC-U4` `AuthService`, `AuthController`: register and login, wired to `TokenIssuer`.
@@ -322,7 +322,7 @@ Open decisions (record as ADRs):
 | OQ3 | Token lifetimes. | Resolved: ADR 0001 (access 900 s, refresh 14 days, from `config/passport.php`). |
 | OQ4 | Scopes per role or policies only? | Resolved: ADR 0001 (empty scopes, authorization in `UserPolicy`). |
 | OQ5 | How does a retailer receive its first password: set by the superadmin, or an emailed set-password link? | Senior |
-| OQ6 | Hard delete or soft delete for `destroy`. | Senior |
+| OQ6 | Hard delete or soft delete for `destroy`. | Resolved: ADR 0003 (soft delete via `deleted_at` and `SoftDeletes` trait). Adopted in `ACC-U1`. |
 | OQ7 | Self-service profile endpoints (`/me`) for retailers and customers. | Senior |
 
 ## 12. Merge plan into the GetNow main repository
