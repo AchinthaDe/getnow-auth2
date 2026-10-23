@@ -239,8 +239,8 @@ Passport's own tables come from its published migrations and belong to Achintha.
 
 Status boxes are ticked by the reviewer, not by agents.
 
-- [ ] `ACC-C0` Bootstrap checks and contract: `composer check` green, `tests/Arch` rules, `TokenIssuer` and `TokenPairData` fixed against the imported code.
-- [ ] `ACC-T0` Import the tokens stream from the earlier project (below).
+- [x] `ACC-C0` Bootstrap checks and contract: `composer check` green, `tests/Arch` rules, `TokenIssuer` and `TokenPairData` fixed against the imported code.
+- [x] `ACC-T0` Import the tokens stream from the earlier project (below).
 - [ ] `ACC-U1` Users foundation: `UserRole`, users migration additions, `User` model, factory, `SuperadminSeeder`.
 - [ ] `ACC-U2` Repository interface and repository, `UserData`, `UserFilterData`, `UserResponseData`.
 - [ ] `ACC-U3` `UserService`, `UserPolicy`, `UserController`, form requests, `/users` routes.
