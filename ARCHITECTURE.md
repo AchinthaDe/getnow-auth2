@@ -119,6 +119,7 @@ database/
 └── seeders/SuperadminSeeder.php                 [U]
 tests/
 ├── Feature/Accounts/                            [U]
+├── Feature/Contract/                            [C]
 ├── Feature/Tokens/                              [T]
 ├── Support/FakeTokenIssuer.php                  [U] used by users-stream tests
 └── Arch/                                        [C]
@@ -241,6 +242,7 @@ Status boxes are ticked by the reviewer, not by agents.
 
 - [x] `ACC-C0` Bootstrap checks and contract: `composer check` green, `tests/Arch` rules, `TokenIssuer` and `TokenPairData` fixed against the imported code.
 - [x] `ACC-T0` Import the tokens stream from the earlier project (below).
+- [x] `ACC-C1` Remove starter kit: strip Fortify, Livewire, Flux UI, passkeys, web routes and views; add unauthenticated JSON contract test.
 - [ ] `ACC-U1` Users foundation: `UserRole`, users migration additions, `User` model, factory, `SuperadminSeeder`.
 - [ ] `ACC-U2` Repository interface and repository, `UserData`, `UserFilterData`, `UserResponseData`.
 - [ ] `ACC-U3` `UserService`, `UserPolicy`, `UserController`, form requests, `/users` routes.
