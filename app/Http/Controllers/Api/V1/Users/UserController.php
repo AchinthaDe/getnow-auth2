@@ -57,8 +57,6 @@ final class UserController extends Controller
 
     public function store(StoreUserRequest $request): JsonResponse
     {
-        $this->authorize('create', User::class);
-
         $user = $this->userService->store($request->toDto());
 
         return response()->json([
@@ -70,17 +68,13 @@ final class UserController extends Controller
     {
         $this->authorize('view', $user);
 
-        $found = $this->userService->show($user->public_id);
-
         return response()->json([
-            'data' => UserResponseData::fromModel($found),
+            'data' => UserResponseData::fromModel($user),
         ]);
     }
 
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        $this->authorize('update', $user);
-
         $updated = $this->userService->update($user, $request->toDto());
 
         return response()->json([

@@ -64,69 +64,61 @@ it('enforces authorization matrix forbidding customers and retailers from admin 
     $this->actingAs($retailer, 'api')->deleteJson("/api/v1/users/{$other->public_id}")->assertForbidden();
 });
 
-it('allows customers and retailers to view and update their own record without role changes', function (): void {
+it('forbids customers and retailers from viewing or updating their own record', function (): void {
     $customer = User::factory()->customer()->create();
     $retailer = User::factory()->retailer()->create();
 
     $this->actingAs($customer, 'api')
         ->getJson("/api/v1/users/{$customer->public_id}")
-        ->assertOk()
-        ->assertJsonPath('data.id', $customer->public_id);
+        ->assertForbidden();
 
     $this->actingAs($customer, 'api')
         ->patchJson("/api/v1/users/{$customer->public_id}", [
             'name' => 'Updated Customer Self',
         ])
-        ->assertOk()
-        ->assertJsonPath('data.name', 'Updated Customer Self');
+        ->assertForbidden();
 
-    expect($customer->fresh()->name)->toBe('Updated Customer Self');
+    expect($customer->fresh()->name)->not->toBe('Updated Customer Self');
 
     $this->actingAs($retailer, 'api')
         ->getJson("/api/v1/users/{$retailer->public_id}")
-        ->assertOk()
-        ->assertJsonPath('data.id', $retailer->public_id);
+        ->assertForbidden();
 
     $this->actingAs($retailer, 'api')
         ->patchJson("/api/v1/users/{$retailer->public_id}", [
             'name' => 'Updated Retailer Self',
         ])
-        ->assertOk()
-        ->assertJsonPath('data.name', 'Updated Retailer Self');
-
-    expect($retailer->fresh()->name)->toBe('Updated Retailer Self');
-});
-
-it('forbids customers and retailers from changing role on update', function (): void {
-    $customer = User::factory()->customer()->create();
-
-    $this->actingAs($customer, 'api')
-        ->patchJson("/api/v1/users/{$customer->public_id}", [
-            'role' => 'retailer',
-        ])
         ->assertForbidden();
 
-    expect($customer->fresh()->role)->toBe(UserRole::Customer);
+    expect($retailer->fresh()->name)->not->toBe('Updated Retailer Self');
 });
 
 it('returns paginated users list ordered by created_at desc with filtering for superadmin', function (): void {
     $admin = User::factory()->superadmin()->create(['created_at' => now()->subMinutes(10)]);
-    User::factory()->create(['name' => 'Alpha User', 'email' => 'alpha@test.com', 'created_at' => now()->subMinutes(5)]);
-    User::factory()->create(['name' => 'Beta User', 'email' => 'beta@test.com', 'created_at' => now()->subMinutes(4)]);
-    User::factory()->create(['name' => 'Gamma User', 'email' => 'gamma@test.com', 'created_at' => now()->subMinutes(3)]);
+    $u1 = User::factory()->create(['name' => 'Alpha User', 'email' => 'alpha@test.com', 'created_at' => now()->subMinutes(5)]);
+    $u2 = User::factory()->create(['name' => 'Beta User', 'email' => 'beta@test.com', 'created_at' => now()->subMinutes(4)]);
+    $u3 = User::factory()->create(['name' => 'Gamma User', 'email' => 'gamma@test.com', 'created_at' => now()->subMinutes(3)]);
 
-    $response = $this->actingAs($admin, 'api')->getJson('/api/v1/users?search=alpha&per_page=10');
-
-    $response->assertOk()
+    // 1. Assert ordering by created_at desc
+    $listResponse = $this->actingAs($admin, 'api')->getJson('/api/v1/users?per_page=10');
+    $listResponse->assertOk()
         ->assertJsonStructure([
             'data',
             'current_page',
             'per_page',
             'total',
         ]);
+    $ids = collect($listResponse->json('data'))->pluck('id')->all();
+    expect($ids[0])->toBe($u3->public_id)
+        ->and($ids[1])->toBe($u2->public_id)
+        ->and($ids[2])->toBe($u1->public_id)
+        ->and($ids[3])->toBe($admin->public_id);
 
-    expect($response->json('data'))->toHaveCount(1)
-        ->and($response->json('data.0.name'))->toBe('Alpha User');
+    // 2. Assert search filter
+    $searchResponse = $this->actingAs($admin, 'api')->getJson('/api/v1/users?search=alpha&per_page=10');
+    $searchResponse->assertOk();
+    expect($searchResponse->json('data'))->toHaveCount(1)
+        ->and($searchResponse->json('data.0.name'))->toBe('Alpha User');
 });
 
 it('returns 422 on invalid query parameters on index', function (): void {
@@ -288,7 +280,7 @@ it('soft deletes user and returns 204 no content', function (): void {
         ->assertNotFound();
 });
 
-it('rejects superadmin creation, promotion, demotion, and deletion with 403 forbidden', function (): void {
+it('rejects superadmin creation, promotion, demotion, and deletion with 403 forbidden leaving database unchanged', function (): void {
     $admin = User::factory()->superadmin()->create();
     $target = User::factory()->create();
 
@@ -301,6 +293,7 @@ it('rejects superadmin creation, promotion, demotion, and deletion with 403 forb
     ])
         ->assertForbidden()
         ->assertJson(['message' => 'Cannot create a user with the superadmin role.']);
+    expect(User::where('email', 'super@example.com')->exists())->toBeFalse();
 
     // 2. Cannot promote to superadmin
     $this->actingAs($admin, 'api')->patchJson("/api/v1/users/{$target->public_id}", [
@@ -308,6 +301,7 @@ it('rejects superadmin creation, promotion, demotion, and deletion with 403 forb
     ])
         ->assertForbidden()
         ->assertJson(['message' => 'Cannot promote a user to the superadmin role.']);
+    expect($target->fresh()->role)->not->toBe(UserRole::Superadmin);
 
     // 3. Cannot change superadmin role
     $this->actingAs($admin, 'api')->patchJson("/api/v1/users/{$admin->public_id}", [
@@ -315,11 +309,14 @@ it('rejects superadmin creation, promotion, demotion, and deletion with 403 forb
     ])
         ->assertForbidden()
         ->assertJson(['message' => 'Cannot change the role of a user with the superadmin role.']);
+    expect($admin->fresh()->role)->toBe(UserRole::Superadmin);
 
     // 4. Cannot delete superadmin
     $this->actingAs($admin, 'api')->deleteJson("/api/v1/users/{$admin->public_id}")
         ->assertForbidden()
         ->assertJson(['message' => 'Cannot delete a user with the superadmin role.']);
+    expect($admin->fresh()->exists())->toBeTrue()
+        ->and($admin->fresh()->trashed())->toBeFalse();
 });
 
 it('allows updating superadmin name and email without role change', function (): void {
@@ -360,47 +357,4 @@ it('forbids customers from updating another user even with an invalid body preve
             'password' => 'short',
         ])
         ->assertForbidden();
-});
-
-it('returns 403 when customer attempts to update their own profile with a bogus or escalated role', function (): void {
-    $customer = User::factory()->customer()->create();
-
-    $this->actingAs($customer, 'api')
-        ->patchJson("/api/v1/users/{$customer->public_id}", [
-            'role' => 'invalid_or_escalated_role',
-        ])
-        ->assertForbidden();
-});
-
-it('requires current_password when customer updates their own password or email', function (): void {
-    $customer = User::factory()->customer()->create([
-        'password' => 'initial-secret123',
-    ]);
-
-    // 1. Missing current_password on password change -> 422
-    $this->actingAs($customer, 'api')
-        ->patchJson("/api/v1/users/{$customer->public_id}", [
-            'password' => 'new-secret1234',
-        ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['current_password']);
-
-    // 2. Wrong current_password -> 422
-    $this->actingAs($customer, 'api')
-        ->patchJson("/api/v1/users/{$customer->public_id}", [
-            'password' => 'new-secret1234',
-            'current_password' => 'wrong-password',
-        ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['current_password']);
-
-    // 3. Valid current_password -> 200 OK
-    $this->actingAs($customer, 'api')
-        ->patchJson("/api/v1/users/{$customer->public_id}", [
-            'password' => 'new-secret1234',
-            'current_password' => 'initial-secret123',
-        ])
-        ->assertOk();
-
-    expect(Hash::check('new-secret1234', $customer->fresh()->password))->toBeTrue();
 });

@@ -16,7 +16,7 @@ final class UserPolicy
 
     public function view(User $actor, User $target): bool
     {
-        return $actor->role === UserRole::Superadmin || $actor->is($target);
+        return $actor->role === UserRole::Superadmin;
     }
 
     public function create(User $actor): bool
@@ -26,7 +26,7 @@ final class UserPolicy
 
     public function update(User $actor, User $target): bool
     {
-        return $actor->role === UserRole::Superadmin || $actor->is($target);
+        return $actor->role === UserRole::Superadmin;
     }
 
     public function delete(User $actor, User $target): bool

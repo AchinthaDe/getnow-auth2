@@ -197,7 +197,7 @@ Login and register success response:
             "tokens": { "access_token": "", "refresh_token": "", "token_type": "Bearer", "expires_in": 900 } } }
 ```
 
-`GET /users` supports `role`, `search` (name or email), `page` and `per_page` (max 100).
+`GET /users` supports `role`, `search` (name or email), `include_trashed` (boolean), `page` and `per_page` (max 100), returning a paginated JSON response with items wrapped in `{"data": [...]}`. Single user endpoints (`POST /users`, `GET /users/{user}`, `PUT/PATCH /users/{user}`) return `{"data": UserResponseData}`.
 
 ## 8. One DTO for insert and update
 

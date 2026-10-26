@@ -27,15 +27,7 @@ final class UpdateUserRequest extends FormRequest
             return false;
         }
 
-        if (! $actor->can('update', $user)) {
-            return false;
-        }
-
-        if ($actor->role !== UserRole::Superadmin && $this->has('role')) {
-            return false;
-        }
-
-        return true;
+        return $actor->can('update', $user);
     }
 
     protected function prepareForValidation(): void
@@ -55,11 +47,7 @@ final class UpdateUserRequest extends FormRequest
         /** @var User|string|null $user */
         $user = $this->route('user');
 
-        /** @var User|null $actor */
-        $actor = $this->user('api') ?? $this->user();
-        $isNonSuperadmin = $actor !== null && $actor->role !== UserRole::Superadmin;
-
-        $rules = [
+        return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => [
                 'sometimes',
@@ -72,12 +60,6 @@ final class UpdateUserRequest extends FormRequest
             'password' => ['sometimes', 'required', 'string', 'min:8', 'max:72'],
             'role' => ['sometimes', 'required', Rule::enum(UserRole::class)],
         ];
-
-        if ($isNonSuperadmin && ($this->has('password') || $this->has('email'))) {
-            $rules['current_password'] = ['required', 'string', 'current_password:api'];
-        }
-
-        return $rules;
     }
 
     public function toDto(): UserData
