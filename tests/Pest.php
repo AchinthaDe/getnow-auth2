@@ -1,6 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\InteractsWithPassportKeys;
 use Tests\TestCase;
 
 /*
@@ -18,6 +21,9 @@ pest()->extend(TestCase::class)
     ->in('Feature', 'Unit');
 
 pest()->use(RefreshDatabase::class)
+    ->in('Feature');
+
+pest()->use(InteractsWithPassportKeys::class)
     ->in('Feature');
 
 /*

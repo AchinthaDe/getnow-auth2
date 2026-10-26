@@ -4,6 +4,7 @@
 - **Deviations accepted**:
   - **CR-1 (Route Seam)**: Added `require __DIR__.'/api/users.php';` to `routes/api.php` to mount the users route group, correcting the brief's assumption that it was already required.
   - **Policy Alignment (Fix 1)**: `UserPolicy` enforced as strictly Superadmin-only for all 5 actions (`viewAny`, `view`, `create`, `update`, `delete`) in accordance with `ARCHITECTURE.md` §3 and §7, overriding the brief's OD-1 self-access recommendation. Self-service profile editing is deferred to a future `/me` endpoint.
+  - **CI Key Infrastructure Fix**: Added shared `InteractsWithPassportKeys` trait in `tests/Support/InteractsWithPassportKeys.php` registered globally for Feature tests in `tests/Pest.php` to supply in-memory test RSA keys to Passport in CI runners where gitignored `storage/oauth-*.key` files are absent.
 - **Debt and follow-ups**:
   - Token revocation (`TokenIssuer::revokeAll`) on user soft-delete, password change, and role change is intentionally deferred to `ACC-U5` per `ARCHITECTURE.md` §10.
 - **What the next step depends on**: `ACC-U4` (`AuthService`, `AuthController`, `LoginRequest`, `RegisterRequest`, `LoginData`, `AuthResultData`, `UserRepositoryInterface::findByEmail`, `/api/v1/auth/register` and `/api/v1/auth/login`) builds directly on `UserService`, `UserRepository`, `UserResponseData`, and `TokenIssuer::issue`.
