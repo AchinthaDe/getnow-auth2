@@ -371,3 +371,36 @@ it('returns 403 when customer attempts to update their own profile with a bogus 
         ])
         ->assertForbidden();
 });
+
+it('requires current_password when customer updates their own password or email', function (): void {
+    $customer = User::factory()->customer()->create([
+        'password' => 'initial-secret123',
+    ]);
+
+    // 1. Missing current_password on password change -> 422
+    $this->actingAs($customer, 'api')
+        ->patchJson("/api/v1/users/{$customer->public_id}", [
+            'password' => 'new-secret1234',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['current_password']);
+
+    // 2. Wrong current_password -> 422
+    $this->actingAs($customer, 'api')
+        ->patchJson("/api/v1/users/{$customer->public_id}", [
+            'password' => 'new-secret1234',
+            'current_password' => 'wrong-password',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['current_password']);
+
+    // 3. Valid current_password -> 200 OK
+    $this->actingAs($customer, 'api')
+        ->patchJson("/api/v1/users/{$customer->public_id}", [
+            'password' => 'new-secret1234',
+            'current_password' => 'initial-secret123',
+        ])
+        ->assertOk();
+
+    expect(Hash::check('new-secret1234', $customer->fresh()->password))->toBeTrue();
+});

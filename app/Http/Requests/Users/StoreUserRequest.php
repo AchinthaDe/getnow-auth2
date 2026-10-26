@@ -43,7 +43,7 @@ final class StoreUserRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email'),
             ],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', 'string', 'min:8', 'max:72'],
             'role' => ['required', Rule::enum(UserRole::class)],
         ];
     }

@@ -55,7 +55,11 @@ final class UpdateUserRequest extends FormRequest
         /** @var User|string|null $user */
         $user = $this->route('user');
 
-        return [
+        /** @var User|null $actor */
+        $actor = $this->user('api') ?? $this->user();
+        $isNonSuperadmin = $actor !== null && $actor->role !== UserRole::Superadmin;
+
+        $rules = [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => [
                 'sometimes',
@@ -65,9 +69,15 @@ final class UpdateUserRequest extends FormRequest
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user instanceof User ? $user : null),
             ],
-            'password' => ['sometimes', 'required', 'string', 'min:8'],
+            'password' => ['sometimes', 'required', 'string', 'min:8', 'max:72'],
             'role' => ['sometimes', 'required', Rule::enum(UserRole::class)],
         ];
+
+        if ($isNonSuperadmin && ($this->has('password') || $this->has('email'))) {
+            $rules['current_password'] = ['required', 'string', 'current_password:api'];
+        }
+
+        return $rules;
     }
 
     public function toDto(): UserData
