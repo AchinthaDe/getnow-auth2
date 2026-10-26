@@ -245,7 +245,7 @@ Status boxes are ticked by the reviewer, not by agents.
 - [x] `ACC-C1` Remove starter kit: strip Fortify, Livewire, Flux UI, passkeys, web routes and views; add unauthenticated JSON contract test.
 - [x] `ACC-U1` Users foundation: `UserRole`, users migration additions, `User` model, factory, `SuperadminSeeder`.
 - [x] `ACC-U2` Repository interface and repository, `UserService`, `UserData`, `UserFilterData`, protections.
-- [ ] `ACC-U3` `UserResponseData`, `UserPolicy`, `UserController`, form requests, `/users` routes.
+- [x] `ACC-U3` `UserResponseData`, `UserPolicy`, `UserController`, form requests, `/users` routes.
 - [ ] `ACC-U4` `AuthService`, `AuthController`: register and login, wired to `TokenIssuer`.
 - [ ] `ACC-U5` Revocation on delete, password change and role change; full authorization tests.
 
