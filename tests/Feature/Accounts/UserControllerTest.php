@@ -315,7 +315,7 @@ it('rejects superadmin creation, promotion, demotion, and deletion with 403 forb
     $this->actingAs($admin, 'api')->deleteJson("/api/v1/users/{$admin->public_id}")
         ->assertForbidden()
         ->assertJson(['message' => 'Cannot delete a user with the superadmin role.']);
-    expect($admin->fresh()->exists())->toBeTrue()
+    expect($admin->fresh())->not->toBeNull()
         ->and($admin->fresh()->trashed())->toBeFalse();
 });
 
