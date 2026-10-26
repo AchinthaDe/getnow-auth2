@@ -334,3 +334,40 @@ it('allows updating superadmin name and email without role change', function ():
     expect($admin->fresh()->name)->toBe('Chief Admin')
         ->and($admin->fresh()->role)->toBe(UserRole::Superadmin);
 });
+
+it('forbids customers from storing users even when payload contains an existing email preventing probe', function (): void {
+    User::factory()->create(['email' => 'victim@example.com']);
+    $customer = User::factory()->customer()->create();
+
+    $this->actingAs($customer, 'api')
+        ->postJson('/api/v1/users', [
+            'name' => 'Probe Name',
+            'email' => 'victim@example.com',
+            'password' => 'secret1234',
+            'role' => 'customer',
+        ])
+        ->assertForbidden();
+});
+
+it('forbids customers from updating another user even with an invalid body preventing validation leak', function (): void {
+    $customer = User::factory()->customer()->create();
+    $other = User::factory()->customer()->create();
+
+    $this->actingAs($customer, 'api')
+        ->patchJson("/api/v1/users/{$other->public_id}", [
+            'name' => '',
+            'email' => 'not-an-email',
+            'password' => 'short',
+        ])
+        ->assertForbidden();
+});
+
+it('returns 403 when customer attempts to update their own profile with a bogus or escalated role', function (): void {
+    $customer = User::factory()->customer()->create();
+
+    $this->actingAs($customer, 'api')
+        ->patchJson("/api/v1/users/{$customer->public_id}", [
+            'role' => 'invalid_or_escalated_role',
+        ])
+        ->assertForbidden();
+});

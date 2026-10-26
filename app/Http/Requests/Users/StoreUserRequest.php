@@ -6,6 +6,7 @@ namespace App\Http\Requests\Users;
 
 use App\Domain\Accounts\Data\UserData;
 use App\Domain\Accounts\Enums\UserRole;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -13,7 +14,10 @@ final class StoreUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        /** @var User|null $actor */
+        $actor = $this->user('api') ?? $this->user();
+
+        return $actor !== null && $actor->can('create', User::class);
     }
 
     protected function prepareForValidation(): void

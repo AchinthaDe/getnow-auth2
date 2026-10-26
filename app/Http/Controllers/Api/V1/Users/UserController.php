@@ -81,12 +81,6 @@ final class UserController extends Controller
     {
         $this->authorize('update', $user);
 
-        /** @var User|null $actor */
-        $actor = $request->user('api');
-        if ($actor !== null && $actor->role !== UserRole::Superadmin && $request->has('role')) {
-            abort(403, 'Non-superadmins cannot modify roles.');
-        }
-
         $updated = $this->userService->update($user, $request->toDto());
 
         return response()->json([

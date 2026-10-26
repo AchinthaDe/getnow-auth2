@@ -15,6 +15,26 @@ final class UpdateUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        /** @var User|null $actor */
+        $actor = $this->user('api') ?? $this->user();
+        if ($actor === null) {
+            return false;
+        }
+
+        /** @var User|string|null $user */
+        $user = $this->route('user');
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        if (! $actor->can('update', $user)) {
+            return false;
+        }
+
+        if ($actor->role !== UserRole::Superadmin && $this->has('role')) {
+            return false;
+        }
+
         return true;
     }
 
@@ -34,7 +54,6 @@ final class UpdateUserRequest extends FormRequest
     {
         /** @var User|string|null $user */
         $user = $this->route('user');
-        $userId = $user instanceof User ? $user->id : null;
 
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
@@ -44,7 +63,7 @@ final class UpdateUserRequest extends FormRequest
                 'string',
                 'email',
                 'max:255',
-                Rule::unique('users', 'email')->ignore($userId),
+                Rule::unique('users', 'email')->ignore($user instanceof User ? $user : null),
             ],
             'password' => ['sometimes', 'required', 'string', 'min:8'],
             'role' => ['sometimes', 'required', Rule::enum(UserRole::class)],
