@@ -18,6 +18,8 @@ interface UserRepositoryInterface
 
     public function show(string $publicId): ?User;
 
+    public function findByEmail(string $email): ?User;
+
     public function store(UserData $data): User;
 
     public function update(User $user, UserData $data): User;
