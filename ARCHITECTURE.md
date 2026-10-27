@@ -246,7 +246,7 @@ Status boxes are ticked by the reviewer, not by agents.
 - [x] `ACC-U1` Users foundation: `UserRole`, users migration additions, `User` model, factory, `SuperadminSeeder`.
 - [x] `ACC-U2` Repository interface and repository, `UserService`, `UserData`, `UserFilterData`, protections.
 - [x] `ACC-U3` `UserResponseData`, `UserPolicy`, `UserController`, form requests, `/users` routes.
-- [ ] `ACC-U4` `AuthService`, `AuthController`: register and login, wired to `TokenIssuer`.
+- [x] `ACC-U4` `AuthService`, `AuthController`: register and login, wired to `TokenIssuer`.
 - [ ] `ACC-U5` Revocation on delete, password change and role change; full authorization tests.
 
 Token import (`ACC-T0`). Source: the earlier project `getnow-auth` (Laravel 13, Passport `^13.10`, spatie/laravel-data `^4.23`). The code is accepted work: the import PR moves it and wires it up, nothing else.
