@@ -330,21 +330,25 @@ it('registers auth routes without collision against token stream routes', functi
         ->and($logoutRoute['action'])->toContain('TokenController@logout');
 });
 
-it('enforces customer role in auth service register regardless of role passed in user data', function (): void {
+it('enforces customer role in auth service register regardless of role passed in user data', function (UserRole $attemptedRole): void {
     $service = app(AuthService::class);
 
+    $email = "attacker-{$attemptedRole->value}@example.com";
     $userData = new UserData(
-        name: 'Attacker Trying Superadmin',
-        email: 'attacker@example.com',
+        name: 'Attacker Trying Role',
+        email: $email,
         password: 'password123',
-        role: UserRole::Superadmin,
+        role: $attemptedRole,
     );
 
     $result = $service->register($userData);
 
     expect($result->user->role)->toBe(UserRole::Customer);
 
-    $persisted = User::where('email', 'attacker@example.com')->first();
+    $persisted = User::where('email', $email)->first();
     expect($persisted)->not->toBeNull()
         ->and($persisted->role)->toBe(UserRole::Customer);
-});
+})->with([
+    'superadmin' => UserRole::Superadmin,
+    'retailer' => UserRole::Retailer,
+]);
