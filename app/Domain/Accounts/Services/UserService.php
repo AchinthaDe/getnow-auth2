@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Accounts\Services;
 
+use App\Domain\Accounts\Contracts\TokenIssuer;
 use App\Domain\Accounts\Contracts\UserRepositoryInterface;
 use App\Domain\Accounts\Data\UserData;
 use App\Domain\Accounts\Data\UserFilterData;
@@ -12,6 +13,7 @@ use App\Domain\Accounts\Exceptions\ProtectedUserException;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Spatie\LaravelData\Optional;
 
@@ -19,6 +21,7 @@ final class UserService
 {
     public function __construct(
         private readonly UserRepositoryInterface $users,
+        private readonly TokenIssuer $tokens,
     ) {}
 
     /**
@@ -106,6 +109,9 @@ final class UserService
             }
         }
 
+        $shouldRevoke = (! $data->password instanceof Optional)
+            || (! $data->role instanceof Optional && $data->role !== $user->role);
+
         $email = ! $data->email instanceof Optional
             ? strtolower(trim($data->email))
             : new Optional;
@@ -117,7 +123,15 @@ final class UserService
             role: $data->role,
         );
 
-        return $this->users->update($user, $normalizedData);
+        return DB::transaction(function () use ($user, $normalizedData, $shouldRevoke): User {
+            $updatedUser = $this->users->update($user, $normalizedData);
+
+            if ($shouldRevoke) {
+                $this->tokens->revokeAll($user);
+            }
+
+            return $updatedUser;
+        });
     }
 
     public function destroy(User $user): void
@@ -126,6 +140,9 @@ final class UserService
             throw ProtectedUserException::cannotDeleteSuperadmin();
         }
 
-        $this->users->destroy($user);
+        DB::transaction(function () use ($user): void {
+            $this->users->destroy($user);
+            $this->tokens->revokeAll($user);
+        });
     }
 }
