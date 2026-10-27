@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Accounts\Exceptions\InvalidCredentialsException;
 use App\Domain\Accounts\Exceptions\ProtectedUserException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -29,6 +30,14 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json([
                     'message' => $e->getMessage(),
                 ], 403);
+            }
+        });
+
+        $exceptions->render(function (InvalidCredentialsException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Invalid credentials.',
+                ], 401);
             }
         });
     })->create();

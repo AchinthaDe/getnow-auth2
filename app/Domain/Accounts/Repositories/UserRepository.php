@@ -49,6 +49,11 @@ final class UserRepository implements UserRepositoryInterface
         return User::query()->where('public_id', $publicId)->first();
     }
 
+    public function findByEmail(string $email): ?User
+    {
+        return User::query()->where('email', $email)->first();
+    }
+
     public function store(UserData $data): User
     {
         $attributes = [
