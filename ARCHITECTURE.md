@@ -197,7 +197,7 @@ Login and register success response:
             "tokens": { "access_token": "", "refresh_token": "", "token_type": "Bearer", "expires_in": 900 } } }
 ```
 
-`GET /users` supports `role`, `search` (name or email), `include_trashed` (boolean), `page` and `per_page` (max 100), returning a paginated JSON response with items wrapped in `{"data": [...]}`. Single user endpoints (`POST /users`, `GET /users/{user}`, `PUT/PATCH /users/{user}`) return `{"data": UserResponseData}`.
+`GET /users` supports `role`, `search` (name or email), `include_trashed` (boolean), `page` and `per_page` (max 100), returning a paginated JSON response with items wrapped in `{"data": [...]}`. Single user endpoints (`POST /users`, `GET /users/{user}`, `PUT/PATCH /users/{user}`) return `{"data": UserResponseData}`. Successful user soft deletion, password updates, and role modifications trigger immediate token revocation via `TokenIssuer::revokeAll`. Name-only, email-only, and identical-role updates do not revoke tokens (see ADR 0004).
 
 ## 8. One DTO for insert and update
 
@@ -247,7 +247,7 @@ Status boxes are ticked by the reviewer, not by agents.
 - [x] `ACC-U2` Repository interface and repository, `UserService`, `UserData`, `UserFilterData`, protections.
 - [x] `ACC-U3` `UserResponseData`, `UserPolicy`, `UserController`, form requests, `/users` routes.
 - [x] `ACC-U4` `AuthService`, `AuthController`: register and login, wired to `TokenIssuer`.
-- [ ] `ACC-U5` Revocation on delete, password change and role change; full authorization tests.
+- [x] `ACC-U5` Revocation on delete, password change and role change; full authorization tests.
 
 Token import (`ACC-T0`). Source: the earlier project `getnow-auth` (Laravel 13, Passport `^13.10`, spatie/laravel-data `^4.23`). The code is accepted work: the import PR moves it and wires it up, nothing else.
 
@@ -324,6 +324,7 @@ Open decisions (record as ADRs):
 | OQ5 | How does a retailer receive its first password: set by the superadmin, or an emailed set-password link? | Senior |
 | OQ6 | Hard delete or soft delete for `destroy`. | Resolved: ADR 0003 (soft delete via `deleted_at` and `SoftDeletes` trait). Adopted in `ACC-U1`. |
 | OQ7 | Self-service profile endpoints (`/me`) for retailers and customers. | Senior |
+| OQ8 | When are tokens revoked on account changes? | Resolved: ADR 0004 (revocation on delete, password update, and role change inside DB::transaction). |
 
 ## 12. Merge plan into the GetNow main repository
 
