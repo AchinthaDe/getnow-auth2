@@ -17,7 +17,11 @@ use Illuminate\Support\Facades\DB;
 
 final class AuthService
 {
-    private const string DUMMY_HASH = '$2y$04$ebgElBN/lGg9/9VJwLY1t.S5psdZy3y1W/E3EahnHCEnu8hO333eW';
+    /**
+     * Constant dummy bcrypt hash matching production BCRYPT_ROUNDS (cost 12 per .env.example).
+     * The cost must track production rounds so timing equalization prevents an email-existence oracle.
+     */
+    private const string DUMMY_HASH = '$2y$12$paGwAYoFIuju5tDSdHrPCOqL7KBasBpmD8nF4EN5nhyUQD0J24r6m';
 
     public function __construct(
         private readonly UserService $userService,

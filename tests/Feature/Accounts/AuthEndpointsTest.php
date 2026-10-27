@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Domain\Accounts\Contracts\TokenIssuer;
 use App\Domain\Accounts\Contracts\UserRepositoryInterface;
 use App\Domain\Accounts\Data\TokenPairData;
+use App\Domain\Accounts\Data\UserData;
 use App\Domain\Accounts\Enums\UserRole;
+use App\Domain\Accounts\Services\AuthService;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -326,4 +328,23 @@ it('registers auth routes without collision against token stream routes', functi
         ->and($refreshRoute['action'])->toContain('TokenController@refresh')
         ->and($logoutRoute)->not->toBeNull()
         ->and($logoutRoute['action'])->toContain('TokenController@logout');
+});
+
+it('enforces customer role in auth service register regardless of role passed in user data', function (): void {
+    $service = app(AuthService::class);
+
+    $userData = new UserData(
+        name: 'Attacker Trying Superadmin',
+        email: 'attacker@example.com',
+        password: 'password123',
+        role: UserRole::Superadmin,
+    );
+
+    $result = $service->register($userData);
+
+    expect($result->user->role)->toBe(UserRole::Customer);
+
+    $persisted = User::where('email', 'attacker@example.com')->first();
+    expect($persisted)->not->toBeNull()
+        ->and($persisted->role)->toBe(UserRole::Customer);
 });
