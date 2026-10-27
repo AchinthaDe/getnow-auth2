@@ -4,12 +4,13 @@
 
 - **Step ID**: `ACC-U4`
 - **Stream**: Users (`[U]`)
-- **Status**: VERIFY
+- **Status**: VERIFY (r2 / Review r1 Response)
 - **Date**: 2026-10-27
 - **Related Plan**: `docs/blueprints/ACC-U4/plan.md` (v1)
 - **Base Branch**: `main`
+- **Base SHA**: `d6fa3e0f98859f25b2a040cc04f3c8b24fa1a932`
 - **Feature Branch**: `feat/users-auth-endpoints`
-- **Head SHA**: `Commit 5 (feat/users-auth-endpoints)`
+- **Head SHA**: `b143cad927c37c0bbdd4918304a695e60e0b8669`
 - **Gaps**: None
 
 ---
@@ -30,7 +31,7 @@ This step builds the Accounts-stream authentication endpoints `POST /api/v1/auth
 
 4. **Domain Auth Service (`app/Domain/Accounts/Services/AuthService.php`)**:
    - `register(UserData $data)`: Wraps execution in `DB::transaction()`, enforces domain-level `role: UserRole::Customer` (Mandatory Guard 2), persists user via `UserService::store`, and issues tokens via `TokenIssuer::issue`.
-   - `login(LoginData $data)`: Normalizes email, queries `UserRepositoryInterface::findByEmail`, performs constant `DUMMY_HASH` timing equalization when user is not found or soft-deleted, checks password via `Hasher::check`, and issues tokens via `TokenIssuer::issue`.
+   - `login(LoginData $data)`: Normalizes email, queries `UserRepositoryInterface::findByEmail`, performs constant `DUMMY_HASH` timing equalization (cost 12 matching production `BCRYPT_ROUNDS=12`) when user is not found or soft-deleted, checks password via `Hasher::check`, and issues tokens via `TokenIssuer::issue`.
 
 5. **Form Requests (`app/Http/Requests/Auth/RegisterRequest.php`, `app/Http/Requests/Auth/LoginRequest.php`)**:
    - `RegisterRequest`: Validates `name`, `email`, `password` (8..72 chars), prohibits `role` (`422`), normalizes email in `prepareForValidation()`, and produces `UserData` with `UserRole::Customer`.
@@ -39,36 +40,171 @@ This step builds the Accounts-stream authentication endpoints `POST /api/v1/auth
 6. **Controller & Routes (`app/Http/Controllers/Api/V1/Auth/AuthController.php`, `routes/api/auth.php`, `routes/api.php`)**:
    - `AuthController`: Thin controller calling `AuthService::register` (returning 201) and `AuthService::login` (returning 200) with `$result->toArray()` parity.
    - `routes/api/auth.php`: Defines guest routes `POST auth/register` (`throttle:auth-register`) and `POST auth/login` (`throttle:auth-login`).
-   - `routes/api.php`: Appends `require __DIR__.'/api/auth.php';` under approved CR-1.
+   - `routes/api.php`: Appends `require __DIR__.'/api/auth.php';` under approved CR-1 (`APPROVED: CR-1`).
 
 7. **Rate Limiters & Exception Mapping (`app/Providers/AppServiceProvider.php`, `bootstrap/app.php`)**:
    - `AppServiceProvider`: Registers named rate limiters `auth-login` (5/min per email+IP with safe string handling per Mandatory Guard 1) and `auth-register` (10/min per IP).
    - `bootstrap/app.php`: Maps `InvalidCredentialsException` to uniform JSON 401 `{"message": "Invalid credentials."}`.
 
 8. **Feature Tests (`tests/Feature/Accounts/AuthEndpointsTest.php`)**:
-   - 10 feature tests covering AC-1 through AC-10, including edge cases, rate limiting, and all mandatory guards.
+   - 11 feature tests covering AC-1 through AC-10 plus F4, including edge cases, rate limiting, and all mandatory guards.
 
 ---
 
-## 2. Mandatory Execution Guards Applied
+## 2. Review Findings Resolution (r1)
 
-1. **Safe String Handling in `auth-login` Rate Limiter**:
-   - Guarded `$request->input('email')` with `is_string()` check to prevent `Array to string conversion` exceptions on array inputs.
-2. **Domain-Level `UserRole::Customer` Enforcement**:
-   - Reconstructed `UserData` in `AuthService::register` explicitly binding `role: UserRole::Customer`.
-3. **`TokenController` Response & Header Parity**:
-   - Mirrored `$result->toArray()` response serialization matching `TokenController`.
-4. **Complete Test Coverage for `AC-2` & `AC-5`**:
-   - Tested 422 validation failure on prohibited `role` across `'retailer'`, `'superadmin'`, and `'customer'`.
-   - Tested 422 login validation failure with `'password' => 'leaked-check-pass'` and asserted non-leakage.
-5. **`InteractsWithPassportKeys` & Rate Limiter Reset**:
-   - Invoked `$this->ensurePassportKeys()` and `Cache::flush()` before and after throttle loops in `AuthEndpointsTest.php`.
-6. **Commit Sequence & Blueprint Hygiene**:
-   - Executed exact 5-commit sequence. Untracked blueprint docs committed in Commit 5; `closeout.md` not created before review; `git status --short` is completely clean.
+| Finding | Severity | Resolution & Evidence |
+|---|---|---|
+| **F1 (Dummy Hash Cost)** | Major | Updated `DUMMY_HASH` in `AuthService.php` to a cost-12 bcrypt literal (`$2y$12$paGwAYoFIuju5tDSdHrPCOqL7KBasBpmD8nF4EN5nhyUQD0J24r6m`), matching production `BCRYPT_ROUNDS=12` in `.env.example`. Added architectural comment explaining that the cost must track production rounds to eliminate the email-existence oracle. Evidence below. |
+| **F2 (Evidence Rule & Header)** | Major | Replaced placeholders with real SHAs: Base SHA `d6fa3e0f98859f25b2a040cc04f3c8b24fa1a932`, Head SHA `b143cad927c37c0bbdd4918304a695e60e0b8669`. Added unedited `git log --oneline main..HEAD`, `git rev-parse main HEAD`, and raw `git diff main...HEAD -- app/Domain/Accounts/Exceptions`. |
+| **F3 (Report Template, Deviations & CR-1)** | Minor | Added AC-to-test mapping table, File Reconciliation, and Deviations sections. Documented CR-1 (`routes/api.php`) bringing code files to 14 (approved by Claude: `APPROVED: CR-1`), customer role re-binding in `AuthService::register`, and F1 dummy hash update. |
+| **F4 (AuthService Customer Role Guard Test)** | Minor | Added direct domain test `it('enforces customer role in auth service register regardless of role passed in user data')` invoking `AuthService::register` with `UserRole::Superadmin` and asserting persisted and returned role is `Customer`. |
+
+### F1 Evidence: Production Cost Tracking
+```powershell
+# 1. .env.example line 16
+Select-String -Path .env.example -Pattern 'BCRYPT_ROUNDS'
+```
+```text
+.env.example:16:BCRYPT_ROUNDS=12
+```
+
+```powershell
+# 2. password_get_info on new DUMMY_HASH literal
+php -r "var_dump(password_get_info('`$2y`$12`$paGwAYoFIuju5tDSdHrPCOqL7KBasBpmD8nF4EN5nhyUQD0J24r6m'));"
+```
+```text
+array(3) {
+  ["algo"]=>
+  string(2) "2y"
+  ["algoName"]=>
+  string(6) "bcrypt"
+  ["options"]=>
+  array(1) {
+    ["cost"]=>
+    int(12)
+  }
+}
+```
+
+```powershell
+# 3. git diff main...HEAD -- app/Domain/Accounts/Exceptions
+git diff main...HEAD -- app/Domain/Accounts/Exceptions
+```
+```diff
+diff --git a/app/Domain/Accounts/Exceptions/InvalidCredentialsException.php b/app/Domain/Accounts/Exceptions/InvalidCredentialsException.php
+new file mode 100644
+index 0000000..7fae634
+--- /dev/null
++++ b/app/Domain/Accounts/Exceptions/InvalidCredentialsException.php
+@@ -0,0 +1,15 @@
++<?php
++
++declare(strict_types=1);
++
++namespace App\Domain\Accounts\Exceptions;
++
++use RuntimeException;
++
++final class InvalidCredentialsException extends RuntimeException
++{
++    public function __construct(string $message = 'Invalid credentials.')
++    {
++        parent::__construct($message);
++    }
++}
+```
 
 ---
 
-## 3. Standard Layer A Command Outputs
+## 3. Mutation Spot-Check Evidence
+
+### Mutation 1: Remove `role: UserRole::Customer` from `AuthService::register`
+Mutated `role: UserRole::Customer` to `role: $data->role` in `app/Domain/Accounts/Services/AuthService.php`.
+```powershell
+vendor/bin/pest --filter="enforces customer role in auth service register regardless of role passed in user data"
+```
+```text
+{"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":0,"duration_ms":2534,"errors":1,"error_details":[{"test":"P\\Tests\\Feature\\Accounts\\AuthEndpointsTest::__pest_evaluable_it_enforces_customer_role_in_auth_service_register_regardless_of_role_passed_in_user_data","file":"\\dev\\getnow-auth2\\app\\Domain\\Accounts\\Exceptions\\ProtectedUserException.php","line":13,"message":"Cannot create a user with the superadmin role.","trace":["C:\\dev\\getnow-auth2\\app\\Domain\\Accounts\\Exceptions\\ProtectedUserException.php:13","C:\\dev\\getnow-auth2\\app\\Domain\\Accounts\\Services\\UserService.php:83","C:\\dev\\getnow-auth2\\app\\Domain\\Accounts\\Services\\AuthService.php:43","C:\\dev\\getnow-auth2\\app\\Domain\\Accounts\\Services\\AuthService.php:35","C:\\dev\\getnow-auth2\\tests\\Feature\\Accounts\\AuthEndpointsTest.php:343"]}]}
+```
+*Result*: Failed as expected (`ProtectedUserException: Cannot create a user with the superadmin role.`). Restored cleanly with `git checkout`.
+
+### Mutation 2: Change `findByEmail` to use `withTrashed()`
+Mutated `return User::query()->where('email', $email)->first();` to `return User::query()->withTrashed()->where('email', $email)->first();` in `app/Domain/Accounts/Repositories/UserRepository.php`.
+```powershell
+vendor/bin/pest --filter="finds user by exact email excluding soft-deleted records"
+```
+```text
+{"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":3,"duration_ms":1477,"failed":1,"failures":[{"test":"P\\Tests\\Feature\\Accounts\\AuthEndpointsTest::__pest_evaluable_it_finds_user_by_exact_email_excluding_soft_deleted_records","file":"\\dev\\getnow-auth2\\tests\\Feature\\Accounts\\AuthEndpointsTest.php","line":306,"message":"Failed asserting that an instance of class App\\Models\\User is null.","trace":["C:\\dev\\getnow-auth2\\tests\\Feature\\Accounts\\AuthEndpointsTest.php:306"]}]}
+```
+*Result*: Failed as expected (soft-deleted user was returned instead of null). Restored cleanly with `git checkout`.
+
+### Mutation 3: Remove `'role' => ['prohibited']` from `RegisterRequest`
+Removed `'role' => ['prohibited']` from `rules()` in `app/Http/Requests/Auth/RegisterRequest.php`.
+```powershell
+vendor/bin/pest --filter="rejects register request with 422 for validation failures duplicate emails and prohibited role leaving database unchanged"
+```
+```text
+{"tool":"pest","result":"failed","tests":1,"passed":0,"assertions":21,"duration_ms":2129,"failed":1,"failures":[{"test":"P\\Tests\\Feature\\Accounts\\AuthEndpointsTest::__pest_evaluable_it_rejects_register_request_with_422_for_validation_failures_duplicate_emails_and_prohibited_role_leaving_database_unchanged","file":"\\dev\\getnow-auth2\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php","line":46,"message":"Expected response status code [422] but received 201.\nFailed asserting that 201 is identical to 422.","trace":["C:\\dev\\getnow-auth2\\vendor\\laravel\\framework\\src\\Illuminate\\Testing\\TestResponseAssert.php:46","C:\\dev\\getnow-auth2\\tests\\Feature\\Accounts\\AuthEndpointsTest.php:95"]}]}
+```
+*Result*: Failed as expected (`Expected response status code [422] but received 201`). Restored cleanly with `git checkout`.
+
+---
+
+## 4. File Reconciliation & Deviations
+
+### File Count Reconciliation
+- Brief expected 12 to 13 files.
+- Actual manifest: Exactly 14 code/config/test files (9 new, 5 modified), plus 3 blueprint deliverables in `docs/blueprints/ACC-U4/`:
+  - **New (9)**:
+    1. `app/Domain/Accounts/Data/LoginData.php`
+    2. `app/Domain/Accounts/Data/AuthResultData.php`
+    3. `app/Domain/Accounts/Exceptions/InvalidCredentialsException.php`
+    4. `app/Domain/Accounts/Services/AuthService.php`
+    5. `app/Http/Requests/Auth/LoginRequest.php`
+    6. `app/Http/Requests/Auth/RegisterRequest.php`
+    7. `app/Http/Controllers/Api/V1/Auth/AuthController.php`
+    8. `routes/api/auth.php`
+    9. `tests/Feature/Accounts/AuthEndpointsTest.php`
+  - **Modified (5)**:
+    1. `app/Domain/Accounts/Contracts/UserRepositoryInterface.php`
+    2. `app/Domain/Accounts/Repositories/UserRepository.php`
+    3. `app/Providers/AppServiceProvider.php`
+    4. `bootstrap/app.php`
+    5. `routes/api.php` (CR-1)
+  - **Blueprints (3)**:
+    1. `docs/blueprints/ACC-U4/brief.md`
+    2. `docs/blueprints/ACC-U4/plan.md`
+    3. `docs/blueprints/ACC-U4/report.md`
+
+### Declared Deviations
+1. **CR-1 Seam Approval**: Adding `require __DIR__.'/api/auth.php';` to `routes/api.php` brought the code manifest to 14 files (1 above the brief's 13-file ceiling). Formally approved by Claude in VERIFY r1 (`APPROVED: CR-1`).
+2. **Domain-Level Customer Role Re-construction**: In plan §5.6, `AuthService::register` outlined passing `$data` directly to `UserService::store`. To satisfy `ARCHITECTURE.md` §8 and Mandatory Guard 2, `AuthService::register` explicitly reconstructs `UserData` binding `role: UserRole::Customer`. Verified via direct domain test for F4.
+3. **Dummy Hash Production Cost Alignment (F1)**: Plan §5.6 proposed cost 4 literal `$2y$04$...`. Fixed in F1 to cost 12 literal `$2y$12$paGwAYoFIuju5tDSdHrPCOqL7KBasBpmD8nF4EN5nhyUQD0J24r6m` tracking `.env.example` `BCRYPT_ROUNDS=12` to prevent an email-existence timing oracle.
+
+---
+
+## 5. Acceptance Criteria to Test Mapping
+
+Generated directly from `tests/Feature/Accounts/AuthEndpointsTest.php`:
+
+| AC ID | Requirement | Exact Test in `tests/Feature/Accounts/AuthEndpointsTest.php` | Assertions | Result |
+|---|---|---|---|---|
+| **AC-1** | `POST /api/v1/auth/register` creates `Customer` via `UserService::create`, returns 201 with `AuthResultData`, hashes password via cast, and stores normalized email | `it('registers a new customer with normalized email and returns 201 with auth result data')` (line 24) | `assertCreated()`, `assertJsonPath` for name, normalized email, role customer, token type Bearer, expires_in 900, access/refresh tokens present, DB user has `UserRole::Customer` and hash checks | PASS |
+| **AC-2** | Register rejects invalid payloads, duplicate emails (including case/whitespace and soft-deleted), weak passwords, and prohibited `role` (`'retailer'`, `'superadmin'`, `'customer'`) with 422 leaving DB unchanged | `it('rejects register request with 422 for validation failures duplicate emails and prohibited role leaving database unchanged')` (line 49) | `assertUnprocessable()` on missing fields, bad email, short password, long password, duplicate email, soft-deleted email, and all 3 role inputs; DB count unchanged | PASS |
+| **AC-3** | Registration is atomic: if token issuance fails, database transaction rolls back leaving no user row | `it('rolls back customer creation atomically when token issuance fails')` (line 114) | Throws from fake `TokenIssuer`, `assertStatus(500)`, asserts `User::where('email', ...)->exists()` is false | PASS |
+| **AC-4** | `POST /api/v1/auth/login` returns 200 with `AuthResultData` for Customer, Retailer, and Superadmin, supporting email casing and whitespace variants | `it('authenticates customer retailer and superadmin returning 200 with auth result data and email casing tolerance')` (line 144) | `assertOk()` across customer (lowercase), retailer (uppercase), superadmin (whitespace); asserts roles and token pair | PASS |
+| **AC-5** | Login credential failures return byte-identical 401 JSON for wrong password, unknown email, and soft-deleted user; malformed inputs return 422; passwords never leaked | `it('returns identical 401 response for wrong password unknown email and soft-deleted user without leaking password')` (line 175) | `assertStatus(401)`, content equality across all 3 failure modes, `assertJson(['message' => 'Invalid credentials.'])`, password not in content; 422 on empty inputs and non-leakage of `'leaked-check-pass'` | PASS |
+| **AC-6** | Response shapes strictly adhere to `UserResponseData` and `TokenPairData` per `ARCHITECTURE.md` Section 7 | `it('serializes login and register responses strictly matching architecture specifications without sensitive fields')` (line 218) | Validates exact keys for `data.user` and `data.tokens`, verifies ULID length 26, verifies no internal integer id, no password, no remember_token | PASS |
+| **AC-7** | Access token authenticates `GET /api/v1/users/{public_id}` via Bearer header; refresh token is accepted by `/api/v1/auth/refresh` | `it('issues tokens that successfully authenticate user endpoint and rotate via refresh endpoint')` (line 246) | Real Bearer token header authenticates `GET /api/v1/users/{public_id}` with 200; refresh token accepted by `/api/v1/auth/refresh` with 200 and token rotation verified | PASS |
+| **AC-8** | Rate limiting enforces 5/min on login and 10/min on register, returning 429 JSON | `it('throttles excessive login and register attempts returning 429')` (line 273) | 5 logins return 401, 6th returns 429; 10 registers return 422, 11th returns 429; deterministic `Cache::flush()` before and after loops | PASS |
+| **AC-9** | `UserRepositoryInterface::findByEmail` matches exact normalized email and returns null for soft-deleted user | `it('finds user by exact email excluding soft-deleted records')` (line 298) | Exact normalized email matches active user; mixed case returns null; soft-deleted email returns null; non-existent email returns null | PASS |
+| **AC-10** | Quality gates, Layer A checks 15a-15k, and regression suites pass cleanly with no route collisions | `it('registers auth routes without collision against token stream routes')` (line 311) | Inspects routing table for `register`, `login`, `refresh`, `logout` coexisting under `/api/v1/auth` without collisions | PASS |
+| **F4** | `AuthService::register` enforces `UserRole::Customer` at the domain level | `it('enforces customer role in auth service register regardless of role passed in user data')` (line 336) | Calls `AuthService::register` directly with `UserRole::Superadmin`; asserts returned DTO and persisted database model both have `UserRole::Customer` | PASS |
+
+---
+
+## 6. Standard Layer A Command Outputs (at HEAD `b143cad`)
 
 ### Command 1: `git status --short`
 ```text
@@ -77,11 +213,21 @@ This step builds the Accounts-stream authentication endpoints `POST /api/v1/auth
 
 ### Command 2: `git log --oneline main..HEAD`
 ```text
-<Commit 5> docs(users): add ACC-U4 blueprint brief, plan, and report
+b143cad fix(users): update dummy hash cost to 12 and add auth service customer role test
+0deb80e docs(users): add ACC-U4 blueprint brief, plan, and report
 2c05068 test(users): add comprehensive authentication endpoint feature tests
 677ce9b feat(users): add auth form requests, controller, routes, and rate limiters
 3ab7a7c feat(users): implement auth service with atomic registration and credential verification
 25dbc3b feat(users): add authentication data transfer objects, domain exception, and repository method
+```
+
+```powershell
+# git rev-parse main HEAD
+git rev-parse main HEAD
+```
+```text
+d6fa3e0f98859f25b2a040cc04f3c8b24fa1a932
+b143cad927c37c0bbdd4918304a695e60e0b8669
 ```
 
 ### Command 3: `git diff --name-status main...HEAD`
@@ -143,7 +289,6 @@ C:\dev\getnow-auth2\bootstrap\cache\services.php
 C:\dev\getnow-auth2\routes\console.php
 C:\dev\getnow-auth2\tests\Unit\ExampleTest.php
 ```
-*(Exact match against baseline; zero new files omitted strict types)*
 
 ### Command 10: `Get-ChildItem app -Recurse -Filter *.php | Select-String -SimpleMatch 'Hash::make'`
 ```text
@@ -191,12 +336,12 @@ storage/logs/.gitignore
  INFO Configuration cache cleared successfully. 
 
 {"tool":"pint","result":"passed"}{"tool":"phpstan","result":"passed","errors":0}
-{"tool":"pest","result":"passed","tests":106,"passed":106,"assertions":454,"duration_ms":17693}
+{"tool":"pest","result":"passed","tests":107,"passed":107,"assertions":457,"duration_ms":64470}
 ```
 
 ---
 
-## 4. Step-Specific Checks (15a – 15k)
+## 7. Step-Specific Checks (15a – 15k)
 
 ### Check 15a: `git diff --name-only main...HEAD -- database`
 ```text
@@ -281,7 +426,6 @@ Get-ChildItem app/Domain/Accounts,app/Http -Recurse -Filter *.php | Select-Strin
 app\Domain\Accounts\Tokens\PassportTokenIssuer.php:150:        $accessExpiry = (new DateTimeImmutable)->add(new DateInterval('PT'.$accessTtlSeconds.'S'));
 app\Domain\Accounts\Tokens\PassportTokenIssuer.php:151:        $refreshExpiry = (new DateTimeImmutable)->add(new DateInterval('P'.$refreshTtlDays.'D'));
 ```
-*(Substring false-positive on `->add(`; no loggers or dump statements)*
 
 ### Check 15j: Route list under `/api/v1/auth`
 ```powershell
@@ -301,12 +445,12 @@ php artisan route:list --path=api/v1/auth
 php artisan test --compact tests/Feature/Tokens tests/Arch tests/Feature/Accounts
 ```
 ```text
-{"tool":"pest","result":"passed","tests":102,"passed":102,"assertions":439,"duration_ms":25848}
+{"tool":"pest","result":"passed","tests":103,"passed":103,"assertions":442,"duration_ms":31204}
 ```
 
 ---
 
-## 5. Raw Git Diff (`main...HEAD -- app bootstrap routes tests`)
+## 8. Raw Git Diff (`main...HEAD -- app bootstrap routes tests`)
 
 ```diff
 diff --git a/app/Domain/Accounts/Contracts/UserRepositoryInterface.php b/app/Domain/Accounts/Contracts/UserRepositoryInterface.php
@@ -381,7 +525,7 @@ index 0000000..7fae634
 +
 +use RuntimeException;
 +
- final class InvalidCredentialsException extends RuntimeException
++final class InvalidCredentialsException extends RuntimeException
 +{
 +    public function __construct(string $message = 'Invalid credentials.')
 +    {
@@ -406,10 +550,10 @@ index 52a1743..796f028 100644
          $attributes = [
 diff --git a/app/Domain/Accounts/Services/AuthService.php b/app/Domain/Accounts/Services/AuthService.php
 new file mode 100644
-index 0000000..69c6e7e
+index 0000000..239c236
 --- /dev/null
 +++ b/app/Domain/Accounts/Services/AuthService.php
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,69 @@
 +<?php
 +
 +declare(strict_types=1);
@@ -429,7 +573,11 @@ index 0000000..69c6e7e
 +
 +final class AuthService
 +{
-+    private const string DUMMY_HASH = '$2y$04$ebgElBN/lGg9/9VJwLY1t.S5psdZy3y1W/E3EahnHCEnu8hO333eW';
++    /**
++     * Constant dummy bcrypt hash matching production BCRYPT_ROUNDS (cost 12 per .env.example).
++     * The cost must track production rounds so timing equalization prevents an email-existence oracle.
++     */
++    private const string DUMMY_HASH = '$2y$12$paGwAYoFIuju5tDSdHrPCOqL7KBasBpmD8nF4EN5nhyUQD0J24r6m';
 +
 +    public function __construct(
 +        private readonly UserService $userService,
@@ -720,10 +868,10 @@ index 0000000..93d7611
 +});
 diff --git a/tests/Feature/Accounts/AuthEndpointsTest.php b/tests/Feature/Accounts/AuthEndpointsTest.php
 new file mode 100644
-index 0000000..72550e0
+index 0000000..8e52d26
 --- /dev/null
 +++ b/tests/Feature/Accounts/AuthEndpointsTest.php
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,350 @@
 +<?php
 +
 +declare(strict_types=1);
@@ -731,7 +879,9 @@ index 0000000..72550e0
 +use App\Domain\Accounts\Contracts\TokenIssuer;
 +use App\Domain\Accounts\Contracts\UserRepositoryInterface;
 +use App\Domain\Accounts\Data\TokenPairData;
++use App\Domain\Accounts\Data\UserData;
 +use App\Domain\Accounts\Enums\UserRole;
++use App\Domain\Accounts\Services\AuthService;
 +use App\Models\User;
 +use Illuminate\Foundation\Testing\RefreshDatabase;
 +use Illuminate\Support\Facades\Cache;
@@ -1052,6 +1202,25 @@ index 0000000..72550e0
 +        ->and($refreshRoute['action'])->toContain('TokenController@refresh')
 +        ->and($logoutRoute)->not->toBeNull()
 +        ->and($logoutRoute['action'])->toContain('TokenController@logout');
++});
++
++it('enforces customer role in auth service register regardless of role passed in user data', function (): void {
++    $service = app(AuthService::class);
++
++    $userData = new UserData(
++        name: 'Attacker Trying Superadmin',
++        email: 'attacker@example.com',
++        password: 'password123',
++        role: UserRole::Superadmin,
++    );
++
++    $result = $service->register($userData);
++
++    expect($result->user->role)->toBe(UserRole::Customer);
++
++    $persisted = User::where('email', 'attacker@example.com')->first();
++    expect($persisted)->not->toBeNull()
++        ->and($persisted->role)->toBe(UserRole::Customer);
 +});
 +```
 +
